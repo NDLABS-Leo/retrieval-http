@@ -41,7 +41,7 @@ func init() {
 
 func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 	// Extract pieceCid from the URL
-	pieceCid := r.URL.Path[len("/retrieval/"):]
+	pieceCid := r.URL.Path[len("/piece/"):]
 	if pieceCid == "" {
 		http.Error(w, "PieceCid is required", http.StatusBadRequest)
 		return
