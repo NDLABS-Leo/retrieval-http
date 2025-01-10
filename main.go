@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -65,27 +63,14 @@ func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 	}
 	defer carFile.Close()
 
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", file.CarPath))
-
-	buffer := make([]byte, 8*1024*1024) // 8MB buffer
-	for {
-		n, err := carFile.Read(buffer)
-		if n > 0 {
-			if _, writeErr := w.Write(buffer[:n]); writeErr != nil {
-				log.Printf("Failed to write to response: %v", writeErr)
-				return
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Printf("File read error: %v", err)
-			http.Error(w, "Error reading file", http.StatusInternalServerError)
-			return
-		}
+	fileInfo, err := carFile.Stat()
+	if err != nil {
+		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
+		log.Printf("Failed to stat file %s: %v", file.CarPath, err)
+		return
 	}
+
+	http.ServeContent(w, r, file.CarPath, fileInfo.ModTime(), carFile)
 }
 
 func main() {
