@@ -77,7 +77,7 @@ func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/retrieval/", handleRetrieval)
+	http.HandleFunc("/piece/", handleRetrieval)
 
 	// Start the HTTP server
 	port := os.Getenv("PORT")
