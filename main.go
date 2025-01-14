@@ -69,6 +69,7 @@ func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to stat file %s: %v", file.CarPath, err)
 		return
 	}
+	log.Printf("Download file %s: ", pieceCid)
 
 	http.ServeContent(w, r, file.CarPath, fileInfo.ModTime(), carFile)
 }
