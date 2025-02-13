@@ -11,9 +11,9 @@ import (
 )
 
 type SealingFileModel struct {
-	Id       int64  `gorm:"primarykey" json:"id"`
-	CarPath  string `gorm:"column:car_path" json:"car_path"`
-	PieceCid string `gorm:"column:piece_cid" json:"piece_cid"`
+	Id      int64  `gorm:"primarykey" json:"id"`
+	CarPath string `gorm:"column:car_path" json:"car_path"`
+	RootCid string `gorm:"column:root_cid" json:"root_cid"`
 }
 
 func (SealingFileModel) TableName() string {
@@ -45,7 +45,7 @@ func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var file SealingFileModel
-	if err := db.First(&file, "piece_cid = ?", pieceCid).Error; err != nil {
+	if err := db.First(&file, "root_cid = ?", pieceCid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, "No data found", http.StatusNotFound)
 		} else {
@@ -54,8 +54,7 @@ func handleRetrieval(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	log.Printf("Download file %s: ", pieceCid)
-
+	log.Printf("Download file... %s: ", pieceCid)
 
 	carFile, err := os.Open(file.CarPath)
 	if err != nil {
