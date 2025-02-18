@@ -3,9 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/ipfs/go-car"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -82,35 +82,28 @@ func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	// Log the start of CAR file reading
 	log.Printf("[INFO] Opening CAR file: %s", file.CarPath)
 
-	// Use go-car to read the CAR file
-	carReader, err := car.NewCarReader(carFile)
-	if err != nil {
+	// Define the size to read (4MB)
+	readSize := 4 * 1024 * 1024
+	buffer := make([]byte, readSize)
+
+	// Read the first 4MB from the CAR file
+	bytesRead, err := carFile.Read(buffer)
+	if err != nil && err != io.EOF {
 		http.Error(w, "Failed to read CAR file", http.StatusInternalServerError)
-		log.Printf("[ERROR] Failed to create CAR reader: %v", err)
+		log.Printf("[ERROR] Failed to read from CAR file %s: %v", file.CarPath, err)
 		return
 	}
-
-	// Read the first block from the CAR file
-	block, err := carReader.Next()
-	if err != nil {
-		http.Error(w, "Failed to retrieve block from CAR file", http.StatusInternalServerError)
-		log.Printf("[ERROR] Failed to read first block: %v", err)
-		return
-	}
-
-	// Log the block's CID and size
-	log.Printf("[INFO] Successfully retrieved first block. CID: %s, Size: %d bytes", block.Cid(), len(block.RawData()))
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(block.RawData())))
-	w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(block.RawData())-1, len(block.RawData())))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", bytesRead))
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", bytesRead-1, bytesRead))
 
-	// Log headers sent to client
-	log.Printf("[INFO] Sending response with Content-Length: %d, Content-Range: bytes 0-%d/%d", len(block.RawData()), len(block.RawData())-1, len(block.RawData()))
+	// Log the headers
+	log.Printf("[INFO] Sending response with Content-Length: %d, Content-Range: bytes 0-%d/%d", bytesRead, bytesRead-1, bytesRead)
 
-	// Write the block's data to the response body
-	_, err = w.Write(block.RawData())
+	// Write the data to the response body
+	_, err = w.Write(buffer[:bytesRead])
 	if err != nil {
 		http.Error(w, "Failed to write block data to response", http.StatusInternalServerError)
 		log.Printf("[ERROR] Failed to write block data to response: %v", err)
@@ -118,7 +111,7 @@ func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log the successful completion of the request
-	log.Printf("[INFO] Successfully returned first block for CID: %s", rootCid)
+	log.Printf("[INFO] Successfully returned first 4MB of CAR file for CID: %s", rootCid)
 }
 
 // handleRetrievalPiece handles content retrieval requests for the piece block
