@@ -5,7 +5,6 @@ go 1.23.2
 require (
 	github.com/ipfs/boxo v0.27.4
 	github.com/ipfs/go-blockservice v0.5.2
-	github.com/ipfs/go-car v0.0.4
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-merkledag v0.11.0
