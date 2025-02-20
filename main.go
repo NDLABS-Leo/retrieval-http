@@ -1,16 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	bstore "github.com/ipfs/boxo/blockstore"
-	"github.com/ipfs/go-blockservice"
-	"github.com/ipfs/go-cid"
-	"github.com/ipfs/go-datastore"
-	dssync "github.com/ipfs/go-datastore/sync"
-	"github.com/ipfs/go-merkledag"
 	"github.com/ipld/go-car"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -49,7 +41,7 @@ func init() {
 	}
 }
 
-// handleRetrievalRoot handles requests to retrieve the first block and return it as a CAR file in memory
+// handleRetrievalRoot handles content retrieval requests for the root block
 func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	// Extract rootCid from the URL path
 	rootCid := r.URL.Path[len("/root/"):]
@@ -60,7 +52,7 @@ func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log received request
-	log.Printf("[INFO] Received request to retrieve first block for CID: %s", rootCid)
+	log.Printf("[INFO] Received request to retrieve file for CID: %s", rootCid)
 
 	// Query the database for the CAR file based on the rootCid
 	var file SealingFileModel
@@ -93,7 +85,7 @@ func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	// Use go-car to read the CAR file
 	carReader, err := car.NewCarReader(carFile)
 	if err != nil {
-		http.Error(w, "Failed to create CAR reader", http.StatusInternalServerError)
+		http.Error(w, "Failed to read CAR file", http.StatusInternalServerError)
 		log.Printf("[ERROR] Failed to create CAR reader: %v", err)
 		return
 	}
@@ -101,57 +93,32 @@ func handleRetrievalRoot(w http.ResponseWriter, r *http.Request) {
 	// Read the first block from the CAR file
 	block, err := carReader.Next()
 	if err != nil {
-		http.Error(w, "Failed to retrieve first block from CAR file", http.StatusInternalServerError)
+		http.Error(w, "Failed to retrieve block from CAR file", http.StatusInternalServerError)
 		log.Printf("[ERROR] Failed to read first block: %v", err)
 		return
 	}
 
-	// Log the first block's CID and size
+	// Log the block's CID and size
 	log.Printf("[INFO] Successfully retrieved first block. CID: %s, Size: %d bytes", block.Cid(), len(block.RawData()))
 
-	// Create a buffer to hold the new CAR file in memory
-	var buffer bytes.Buffer
+	// Set response headers
+	w.Header().Set("Content-Type", "application/vnd.ipld.car")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(block.RawData())))
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(block.RawData())-1, len(block.RawData())))
 
-	// Prepare the roots slice containing the CID of the first block
-	roots := []cid.Cid{block.Cid()}
+	// Log headers sent to client
+	log.Printf("[INFO] Sending response with Content-Length: %d, Content-Range: bytes 0-%d/%d", len(block.RawData()), len(block.RawData())-1, len(block.RawData()))
 
-	// Create a Blockstore and store the block
-	ds := dssync.MutexWrap(datastore.NewMapDatastore())
-	bs := bstore.NewBlockstore(ds)
-	bserv := blockservice.New(bs, nil)
-	dserv := merkledag.NewDAGService(bserv)
-
-	// Store the block in the Blockstore
-	err = bs.Put(context.Background(), block)
+	// Write the block's data to the response body
+	_, err = w.Write(block.RawData())
 	if err != nil {
-		http.Error(w, "Failed to store block in blockstore", http.StatusInternalServerError)
-		log.Printf("[ERROR] Failed to store block in blockstore: %v", err)
-		return
-	}
-
-	// Write the CAR file to the buffer (in-memory file)
-	err = car.WriteCar(context.Background(), dserv, roots, &buffer)
-	if err != nil {
-		http.Error(w, "Failed to write CAR file to memory", http.StatusInternalServerError)
-		log.Printf("[ERROR] Failed to write CAR file to memory: %v", err)
-		return
-	}
-
-	// Set the response headers for the CAR file
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", "attachment; filename=first_block.car")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", buffer.Len()))
-
-	// Write the in-memory CAR file to the response
-	_, err = w.Write(buffer.Bytes())
-	if err != nil {
-		http.Error(w, "Failed to write in-memory CAR file to response", http.StatusInternalServerError)
-		log.Printf("[ERROR] Failed to write in-memory CAR file to response: %v", err)
+		http.Error(w, "Failed to write block data to response", http.StatusInternalServerError)
+		log.Printf("[ERROR] Failed to write block data to response: %v", err)
 		return
 	}
 
 	// Log the successful completion of the request
-	log.Printf("[INFO] Successfully returned first block as CAR file for CID: %s", rootCid)
+	log.Printf("[INFO] Successfully returned first block for CID: %s", rootCid)
 }
 
 // handleRetrievalPiece handles content retrieval requests for the piece block
